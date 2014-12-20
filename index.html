@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+
+<!-- /**
+* @author Benjamin M. Chase <benjamin.chase@fh-luebeck.de>
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+* http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*
+*/ -->
+
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+		<meta http-equiv="X-UA-Compatible" content="chrome=1">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>NDT Websocket Client</title>
+		<link rel="stylesheet" type="text/css" href="./css/ndt.css">
+		<link rel="stylesheet" href="./css/bootstrap.min.css">
+		<link rel="stylesheet" href="./css/bootstrap-theme.min.css">
+		<link rel="chrome-application-definition" href="manifest.json">
+	</head>
+	<body>
+		<!-- Fixed navbar -->
+		<nav class="navbar navbar-default navbar-static-top" role="navigation">
+			<div class="container-fluid">
+				<div class="navbar-header">
+					<a class="navbar-brand" href="#">NDT Chrome Extension Client</a>
+				</div>
+
+				<ul class="nav navbar-nav navbar-right">
+
+					<li class="dropdown">
+						<a href="#" class="dropdown-toggle btn dropdown" data-toggle="dropdown" role="button" aria-expanded="false">Select Test Server <span class="caret"></span></a>
+						<ul class="dropdown-menu" role="menu">
+							<li>
+								<a urn="ndt.fh-luebeck.de">Fachhochschule L&uuml;beck - L&uuml;beck (Germany)</a>
+							</li>
+							<li>
+								<a urn="ndt.anl.gov">Argonne National Laboratory - IL (USA)</a>
+							</li>
+							<li>
+								<a urn="web100.rit.edu">Rochester Institute of Technology - Rochester NY (USA)</a>
+							</li>
+							<li>
+								<a urn="ndt.iupui.mlab1.ham01.measurement-lab.org">Measurement Lab - Hamburg (Germany)</a>
+							</li>
+							<!-- <li>
+							<a urn="netspeed.stanford.edu:">Stanford University - Palo Alto CA (USA)</a>
+							</li> -->
+							<li>
+								<a urn="jlab4.jlab.org"> Thomas Jefferson National Accelerator Facility - VA (USA)</a>
+							</li>
+						</ul>
+					</li>
+
+				</ul>
+			</div>
+		</nav>
+		<div class="alert alert-danger fade in hide" id="hostSelectAlert">
+			<strong>Error!</strong> Please select a test server.
+		</div>
+		<div id="startpanel" class="panel panel-default">
+			<div class="panel-heading">
+				<h3 class="panel-title">Start NDT Test:</h3>
+			</div>
+			<div class="panel-body container-fluid">
+				<div class="row">
+
+					<div class="col-md-2">
+						<div class="btn-group">
+							<!-- Allow Tests to be Selected in a later Version
+							<label class="btn btn-default active" for="C2S">
+							<input type="checkbox" id="C2S" checked>
+							C2S throughput test</label>
+							<label class="btn btn-default active" for="S2C">
+							<input type="checkbox" id="S2C" checked>
+							S2C throughput test</label>
+							<label class="btn btn-default active" for="META">
+							<input type="checkbox" id="META" checked>
+							META test</label>
+							<label class="btn btn-default" for="MID">
+							<input type="checkbox" id="MID" >
+							Middlebox test</label>
+							<label class="btn btn-default" for="SFW">
+							<input type="checkbox" id="SFW" >
+							Simple firewall test</label> -->
+
+							<button id="StartBtn" type="button" class="btn btn-success">
+								Start
+							</button>
+							<button id="resetBtn" type="button" class="btn btn-danger">
+								Reset
+							</button>
+						</div>
+					</div>
+					<div class="col-md-10">
+						<h4>Progress </h4>
+						<div class="progress">
+
+							<div class="progress">
+								<div id="c2sbar" class="progress-bar progress-bar-success" role="progressbar" aria-valuenow="40" aria-valuemin="0" aria-valuemax="40" style="transition: 12s; -webkit-transition: 12s; width: 0%">
+									<span class="sr-only">40% Complete C2S Test</span>
+								</div>
+								<div id="s2cbar" class="progress-bar progress-bar-success" role="progressbar" aria-valuenow="50" aria-valuemin="0" aria-valuemax="50" style="transition: 20s; -webkit-transition: 20s; width: 0%">
+									<span class="sr-only">50% Complete S2C Test</span>
+								</div>
+								<div id="metabar" class="progress-bar progress-bar-success" role="progressbar" aria-valuenow="10" aria-valuemin="0" aria-valuemax="10" style="transition: 1s; -webkit-transition: 1s; width: 0%">
+									<span class="sr-only">10% Complete Meta Test</span>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<div id="browserCompat" class="jumbotron hide">
+
+		</div>
+
+		<!-- Nav tabs -->
+		<ul class="nav nav-tabs" role="tablist" id="ndtTab">
+			<li role="presentation" class="active">
+				<a href="#detailsmessages" id="detailstab" role="tab" data-toggle="tab">Connection Details</a>
+			</li>
+			<li role="presentation">
+				<a href="#results" id="resultstab" role="tab" data-toggle="tab" class="hide">Results</a>
+			</li>
+			<li role="presentation">
+				<a href="#web100varsmessages" id="web100varstab" role="tab" data-toggle="tab" class="hide">Web100Vars</a>
+			</li>
+			<li role="presentation">
+				<a href="#debugmessages" id="debugtab" role="tab" data-toggle="tab">Debug</a>
+			</li>
+		</ul>
+
+		<!-- Tab panes -->
+		<div id="dialogspanes" class="tab-content">
+			<div role="tabpanel" class="tab-pane hide" id="results">
+				<div class="panel panel-default">
+					<div class="panel-heading">
+						Results
+					</div>
+					<div class="panel-body">
+						<div id="dashboard" class="container-fluid" >
+							<div class="row">
+								<div class="col-sm-5">
+									<div class="panel panel-default">
+										<div class="panel-heading">
+											Download
+										</div>
+										<div class="panel-body">
+											<canvas id="download"></canvas>
+											<div >
+												<b id="downloadtext"></b><b id="downloadunit"></b>
+											</div>
+										</div>
+									</div>
+
+								</div>
+								<div class="col-sm-2">
+									<div class="panel panel-default">
+										<div class="panel-heading">
+											Average Round Trip Time
+										</div>
+										<div class="panel-body">
+											<!-- <canvas id="avgrtt"></canvas> -->
+											<div >
+												<b id="avgrtttext"></b><b>ms</b>
+											</div>
+										</div>
+									</div>
+
+								</div>
+
+								<div class="col-sm-5">
+									<div class="panel panel-default">
+										<div class="panel-heading">
+											Upload
+										</div>
+										<div class="panel-body">
+											<canvas id="upload"></canvas>
+											<div >
+												<b id="uploadtext"></b><b id="uploadunit"></b>
+											</div>
+										</div>
+									</div>
+
+								</div>
+
+							</div>
+							<div id="results2row" class="row">
+								<div class="col-sm-5">
+									<div class="panel panel-default">
+										<div class="panel-heading">
+											Results
+										</div>
+										<div class="panel-body" id="resultstext"></div>
+									</div>
+
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+			<div role="tabpanel" class="tab-pane active" id="detailsmessages">
+				<div class="panel panel-default">
+					<div class="panel-heading">
+						Details
+					</div>
+					<div class="panel-body">
+						<div id="details" class="well"></div>
+					</div>
+				</div>
+			</div>
+			<div role="tabpanel" class="tab-pane hide" id="web100varsmessages">
+				<div class="panel panel-default">
+					<div class="panel-heading">
+						Web100 Variables
+					</div>
+					<div class="panel-body">
+						<div id="web100vars" class="well"></div>
+					</div>
+				</div>
+
+			</div>
+			<div role="tabpanel" class="tab-pane" id="debugmessages">
+				<div class="panel panel-default">
+					<div class="panel-heading">
+						Debug Output
+					</div>
+					<div class="panel-body">
+						<div id="debug" class="well"></div>
+					</div>
+				</div>
+			</div>
+
+		</div>
+
+		<footer class="footer">
+			<div class="container">
+				<p class="text-muted text-center">
+					<a href="https://www.fh-luebeck.de" target="_blank">Fachhochschule L&uuml;beck</a> - <a href="https://code.google.com/p/ndt/" target="_blank">Network Diagnostic Tool (NDT)</a> - <a href="http://www.internet2.edu/" target="_blank">Internet2</a><!-- - <a href="https://github.com/bchase78/wsndt">Fork me on GitHub</a> -->
+					- Benjamin Chase 2014
+				</p>
+			</div>
+		</footer>
+		<!-- Include at end of page to speed up load time -->
+		<!-- Jquery must be loaded first -->
+		<script type="text/javascript" src="./js/jquery-2.1.1.min.js"></script>
+		<script type="text/javascript" src="./js/modernizr.js"></script>
+		<script type="text/javascript" src="./js/gauge.js"></script>
+		<script type="text/javascript" src="./js/ndt_constants.js"></script>
+		<script type="text/javascript" src="./js/tcp-client.js"></script>
+		<script type="text/javascript" src="./js/ndt_utils.js"></script>
+		<script type="text/javascript" src="./js/ndt_client.js"></script>
+		<script type="text/javascript" src="./js/ndt_controller.js"></script>
+		<script type="text/javascript" src="./js/meta_test.js"></script>
+		<script type="text/javascript" src="./js/c2s_test.js"></script>
+		<script type="text/javascript" src="./js/s2c_test.js"></script>
+		<script type="text/javascript" src="./js/test_results.js"></script>
+		<script type="text/javascript" src="./js/useragenttools.js"></script>
+		<script type="text/javascript" src="./locale/en_US/DisplayMessages.js"></script>
+		<script type="text/javascript" src="./js/bootstrap.min.js"></script>
+	</body>
+</html>
