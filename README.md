@@ -2,11 +2,17 @@
 
 This is an experimental HTML5 based Network Diagnostic Tool (NDT) client that uses the Chrome Socket API to connect as a normal TCP client to a NDT server.
 
-To use this client you must simply install the ndt-chromapp.crx in your Chrome browser by drag and drop or in Chrome OS with a double click. The client is then available to use as an app in Chrome.
+To use this client you must install the ndt-chromeapp.crx in your Chrome browser. To do this 
 
-* The code is based on the wsNDT client that is availble here: https://github.com/bchase78/wsndt
+* navigate to: chrome://extensions/
+* drag and drop ndt-chromeapp.crx on the browser window
+* click ok to install 
 
-* This package version can be installed in Chrome > v33
+The client is then available to use as an app in Chrome.
+
+* The client code is based on the wsNDT client that is availble here: https://github.com/bchase78/wsndt
+
+* This package version can only be installed in Chrome > v33
 
 
 ## Resources
