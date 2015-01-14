@@ -18,6 +18,15 @@
 // var wsWwTest = false;
 
 $(document).ready(function() {
+	// Find the closest mlab server using mlab-ns.
+	$.ajax({
+		'url': 'http://mlab-ns.appspot.com/ndt',
+		'dataType': 'json',
+		'success': function (data) {
+			$('#mlabns').attr('urn', data.fqdn);
+		}
+	});
+
 	//hide Results on before test has been run
 
 	if (!DEBUG) {
@@ -57,8 +66,6 @@ $(document).ready(function() {
 		$("#StartBtn").prop('disabled', false);
 		var selText = $(this).text();
 		hostname = $(this).attr("urn");
-		// var hostUrn = $(this).attr("urn");
-		// console.log(hostUrn);
 		$(this).parents('.dropdown').find('.btn').html(selText + ' <span class="caret"></span>');
 	});
 
@@ -90,7 +97,7 @@ function showResults() {
 
 	// Printing property names and values using Array.forEach
 	Object.getOwnPropertyNames(clientResults).forEach(function(val, idx, array) {
-		if (clientResults[val].length > 0 && clientResults[val].indexOf("function") == -1) {
+		if (clientResults[val] !== null && clientResults[val].length !== undefined && clientResults[val].length > 0 && clientResults[val].indexOf("function") == -1) {
 			writeToScreen((val + ': ' + clientResults[val]), 'web100vars');
 		}
 	});

@@ -31,7 +31,8 @@ var c2sSocket = null;
 // var THRESHOLD = 2001 * PREDEFINED_BUFFER_SIZE;
 
 //Prepare test data
-var testData = stringToArrayBuffer(createTestBuffer(PREDEFINED_BUFFER_SIZE));
+// Without multiplying by 100, the overhead of javascript will cause everything to be CPU bound.
+var testData = stringToArrayBuffer(createTestBuffer(PREDEFINED_BUFFER_SIZE*100));
 
 /**
  * Description - Establishes a websocket connection with the server at the c2sUri. The connect uses a
@@ -135,14 +136,11 @@ function startC2STest() {
 
 		function func() {
 			timer = setTimeout(func, 0);
-			//send the test data over the c2s data socket in 5 packet bursts to prevent the browser from locking
-			// for ( var i = 0; i < 5; i++) {
 			//only count the packets that have been sent during the measurement time
 			if (new Date().getTime() < clientResults.c2sStartTime + C2S_DURATION) {
 				send(testData, c2sSocket);
-				// clientResults.c2stestDatasent += PREDEFINED_BUFFER_SIZE;
+				clientResults.c2stestDatasent += testData.byteLength;
 			}
-			// }
 			//loop until current time is greater than the start time and the test duration ... ca. 15s
 			if (new Date().getTime() >= clientResults.c2sStartTime + C2S_DURATION) {
 				stop();
@@ -158,4 +156,41 @@ function startC2STest() {
 	}
 
 	run();
+}
+
+function processC2SMessage(header, content) {
+        if (!clientState.versionCompatible) { return true; }
+        switch (header.charCodeAt(0)) {
+                case TEST_PREPARE:
+                        if (DEBUG) { writeToScreen('C2S: TEST_PREPARE', 'debug'); }
+			c2sPort = parseInt(content);
+			if (DEBUG) { writeToScreen('<span style="color: blue;">c2sPort:' + content + '</span>', 'debug'); }
+			C2SSocket();
+                        return false;
+                case TEST_START:
+                        if (DEBUG) { writeToScreen('C2S: TEST_START', 'debug'); }
+			startC2STest();
+			//start progressbar
+			c2sProgress();
+			//Show message runningOutboundTest
+			writeToScreen(displayMessages.runningOutboundTest, 'details');
+                        return false;
+                case TEST_MSG:
+                        if (DEBUG) { writeToScreen('C2S: TEST_MSG', 'debug'); }
+                        getResults(content);
+			//get client upload speed from c2s test results
+			if (content > 0 && clientResults.serverDerivedUploadSpd === null) {
+				// client upload speed
+				if (DEBUG) { writeToScreen('<span style="color: blue;">Client upload:' + content + '</span>', 'debug'); }
+				clientResults.serverDerivedUploadSpd = content;
+			}
+                        return false;
+                case TEST_FINALIZE:
+                        if (DEBUG) { writeToScreen('C2S: TEST_FINALIZE', 'debug'); }
+			onCloseC2S();
+                        return true;
+                default:
+                        if (DEBUG) { writeToScreen('Bad message type during c2stest: ' + header.charCodeAt(0), 'debug'); }
+                        return true;
+        }
 }

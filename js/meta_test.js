@@ -40,3 +40,25 @@ function startMetaTest() {
 	// Signalize end of transmission with empty TEST_MSG packet
 	sendNDTControlMsg(TEST_MSG, "");
 } 
+
+function processMetaMessage(header, contents) {
+        if (!clientState.versionCompatible) { return true; }
+        switch (header.charCodeAt(0)) {
+                case TEST_PREPARE:
+                        if (DEBUG) { writeToScreen('META: TEST_PREPARE', 'debug'); }
+                        return false;
+                case TEST_START:
+                        if (DEBUG) { writeToScreen('META: TEST_START', 'debug'); }
+                        startMetaTest();
+			metaProgress();
+			writeToScreen(displayMessages.sendingMetaInformation, 'details');
+                        return false;
+                case TEST_FINALIZE:
+                        if (DEBUG) { writeToScreen('META: TEST_FINALIZE', 'debug'); }
+			writeToScreen(displayMessages.stopping, 'details');
+                        return true;
+                default:
+                        if (DEBUG) { writeToScreen('Bad message type during META test: ' + header.charCodeAt(0), 'debug'); }
+                        return true;
+        }
+}

@@ -17,8 +17,7 @@
 
 var ndtMessageLength = null;
 var ndtControlSocket = null;
-var alreadySent = false;
-
+var testsToRun = [];
 
 /**
  * Description starts the client.
@@ -38,12 +37,7 @@ function ControlSocket() {
 
 	ndtControlSocket = new TcpClient(hostname, controlPort);
 	ndtControlSocket.connect(function() {
-
-		ndtControlSocket.addResponseListener(function(data) {
-			// onMessage(data);
-			readNDTControlMsg(data);
-		});
-
+		ndtControlSocket.addResponseListener(makeMessageResponder());
 		onOpen();
 	});
 
@@ -92,7 +86,7 @@ function sendNDTControlMsg(type, message) {
 			x[0] = message;
 			send(body, ndtControlSocket);
 		} else {
-			//error. Message must be either an Arraybuffer or a number less than 256
+			console.log('error. Message must be either an Arraybuffer or a number less than 256');
 		}
 	}
 
@@ -136,11 +130,33 @@ function onControlClose() {
  * @param {} evt
  * @return
  */
-function onMessage(data) {
-	readNDTControlMsg(arrayBufferToString(data));
-	// if (DEBUG) {
-	// writeToScreen('<span style="color: blue;">onMessage RESPONSE: ' + arrayBufferToString(evt.data) + '</span>', 'debug');
-	// }
+function makeMessageResponder() {
+	// The variables to be closed over
+	var ndtMessageQueue = "", kicked = false;
+	// The callback, closed over the queue and state variables.
+	return function (data) {
+		var msgLength, content, header;
+		ndtMessageQueue += data;
+		if (!kicked) {
+			if (ndtMessageQueue.length >= KICK_OFF.length && ndtMessageQueue.substr(0, KICK_OFF.length) === KICK_OFF) {
+				kicked = true;
+				ndtMessageQueue = ndtMessageQueue.slice(KICK_OFF.length);
+			}
+			if (!kicked) { return; }
+		}
+		// Process every message contained in the ndtMessageQueue
+		while (true) {
+			if (ndtMessageQueue.length < 3) { return; }
+			msgLength = ((ndtMessageQueue.charCodeAt(1) << 8) | ndtMessageQueue.charCodeAt(2));
+			if (ndtMessageQueue.length < msgLength + 3) {
+                                return;
+                        }
+                        header = ndtMessageQueue.substr(0, 3)
+			content = ndtMessageQueue.substr(3, msgLength);
+			ndtMessageQueue = ndtMessageQueue.slice(msgLength + 3);
+			readNDTControlMsg(header, content);
+		}
+	};
 }
 
 /**
@@ -161,337 +177,167 @@ function onError(evt) {
  * @param {} message
  * @return
  */
-function readNDTControlMsg(message) {
-
-	// In case of Old Client Kick Off message: do nothing
-	if (message == KICK_OFF) {
-		// remove kick off message from data stream
-		var messageContent = extractNDTMessageBody(message, KICK_OFF.length);
-		message = messageContent[0];
-		return;
-	}
-
-	//parse messages until the end
-	while (message.length > 0) {
-
-		switch (message.charCodeAt(0)) {
-		case COMM_FAILURE:
-			message = extractNDTHeader(message);
-			if (DEBUG) {
-				writeToScreen('<span style="color: blue;">RESPONSE: COMM_FAILURE</span>', 'debug');
-			}
-			break;
-		case SRV_QUEUE:
-			message = extractNDTHeader(message);
-			clientState.waitingForMessage = true;
-
-			if (DEBUG) {
-				writeToScreen('<span style="color: blue;">RESPONSE: SRV_QUEUE</span>', 'debug');
-			}
-			break;
-		case MSG_LOGIN:
-			message = extractNDTHeader(message);
-			var messageContent = extractNDTMessageBody(message, ndtMessageLength);
-			message = messageContent[0];
-
-			if (DEBUG) {
-				writeToScreen('<span style="color: blue;">RESPONSE: MSG_LOGIN</span>', 'debug');
-			}
-
-			//get the server Version. look for a "v" in the message for the version
-			if ((messageContent[1].indexOf("v")) != -1) {
-				clientResults.serverVersion = messageContent[1];
-				// if client version is too old close connection
-				if (clientResults.serverVersion < LAST_VALID_SERVER_VERSION) {
-					clientState.versionCompatible = false;
-					// ndtControlSocket.disconnect(ndtControlSocket.socketId);
-					writeToScreen('<span style="color: red;">Server is too old for this client. Closing connection.</span>', 'details');
-					break;
-				}
-				if (clientResults.serverVersion == CLIENT_VER) {
-					clientState.versionCompatible = true;
-					writeToScreen('<span style="color: blue;">Client and server have the same version.</span>', 'details');
-				}
-
-				if (clientResults.serverVersion > LAST_VALID_SERVER_VERSION && clientResults.serverVersion < CLIENT_VER || clientResults.serverVersion > CLIENT_VER) {
-					clientState.versionCompatible = true;
-					writeToScreen('<span style="color: orange;">Client and server do not have the same version, but should be compatible.</span>', 'details');
-				}
-
-				// Server version
-				writeToScreen('<span style="color: blue;">Server Version:' + clientResults.serverVersion + '</span>', 'details');
-			}
-
-			//TODO: check tests sent from server
-			// if (messageContent[1].indexOf(TESTTYPE_C2S) != -1 || messageContent[1].indexOf(TESTTYPE_META) != 1
-			// || messageContent[1].indexOf(TESTTYPE_S2C) != 1 || messageContentessageContent[1].indexOf(TESTTYPE_MID) != 1 || messageContent[1].indexOf(TESTTYPE_SFW) != 1) {
-			// }
-
-			// var testArray = messageContent[1].split(/[ ,\n]+/);
-			// for ( testOffset = 0; testOffset < testArray.length; testOffset++) {
-			// //find the occurence of the string and set the corresponding value in the object
-			// if (testArray[testOffset].indexOf("CurMSS") > -1) {
-			// clientResults.CurMSS = testArray[testOffset + 1];
-			// }
-
-			break;
-		case TEST_PREPARE:
-			message = extractNDTHeader(message);
-			var messageContent = extractNDTMessageBody(message, ndtMessageLength);
-			message = messageContent[0];
-
-			if (DEBUG) {
-				writeToScreen('<span style="color: blue;">RESPONSE: TEST_PREPARE</span>', 'debug');
-			}
-			//only start test on compatible server
-			if (clientState.versionCompatible) {
-				switch (clientState.currentTest) {
-				case HANDSHAKE:
-					clientState.currentTest = TESTTYPE_C2S;
-					c2sPort = parseInt(messageContent[1]);
-					if (DEBUG) {
-						writeToScreen('<span style="color: blue;">c2sPort:' + messageContent[1] + '</span>', 'debug');
-					}
-					C2SSocket();
-					break;
-				case TESTTYPE_C2S:
-					// C2SSocket();
-					break;
-				case TESTTYPE_S2C:
-					s2cPort = parseInt(messageContent[1]);
-					if (DEBUG) {
-						writeToScreen('<span style="color: blue;">s2cPort:' + messageContent[1] + '</span>', 'debug');
-					}
-					S2CSocket();
-					//start progressbar
-					s2cProgress();
-					//runningInboundTest
-					writeToScreen(displayMessages.runningInboundTest, 'details');
-					break;
-				default:
-					break;
-
-				}
-			}
-
-			break;
-		case TEST_START:
-			message = extractNDTHeader(message);
-			if (DEBUG) {
-				writeToScreen('<span style="color: blue;">RESPONSE: TEST_START</span>', 'debug');
-			}
-			//only start test on compatible server
-			if (clientState.versionCompatible) {
-				switch (clientState.currentTest) {
-				case TESTTYPE_C2S:
-					// startWorker(c2sWorker);
-					startC2STest();
-					//start progressbar
-					c2sProgress();
-					//Show message runningOutboundTest
-					writeToScreen(displayMessages.runningOutboundTest, 'details');
-					break;
-				case TESTTYPE_META:
-					startMetaTest();
-					//start progressbar
-					metaProgress();
-					//sendingMetaInformation
-					writeToScreen(displayMessages.sendingMetaInformation, 'details');
-					break;
-				default:
-					break;
-				}
-			}
-
-			break;
-		case TEST_MSG:
-
-			getResults(message);
-			// Duration is the last variable sent, after send the results and close the s2c connection
-			if (clientState.currentTest == TESTTYPE_S2C && !alreadySent) {
-				alreadySent = true;
-				onCloseS2C();
-			}
-			message = extractNDTHeader(message);
-			clientState.waitingForMessage = true;
-
-			if (DEBUG) {
-				writeToScreen('<span style="color: blue;">RESPONSE: TEST_MSG</span>', 'debug');
-			}
-			break;
-		case TEST_FINALIZE:
-			message = extractNDTHeader(message);
-			if (DEBUG) {
-				writeToScreen('<span style="color: blue;">RESPONSE: TEST_FINALIZE</span>', 'debug');
-			}
-			switch (clientState.currentTest) {
-			case TESTTYPE_C2S:
-				clientState.currentTest = TESTTYPE_S2C;
-				onCloseC2S();
-				break;
-			case TESTTYPE_S2C:
-				clientState.currentTest = TESTTYPE_META;
-				break;
-			case TESTTYPE_META:
-				clientState.currentTest = null;
-				writeToScreen(displayMessages.stopping, 'details');
-				break;
-			default:
-				clientState.currentTest = null;
-				break;
-			}
-			break;
-		case MSG_ERROR:
-			message = extractNDTHeader(message);
-			if (DEBUG) {
-				writeToScreen('<span style="color: blue;">RESPONSE: MSG_ERROR</span>', 'debug');
-			}
-			break;
-		case MSG_RESULTS:
-			getResults(message);
-			message = extractNDTHeader(message);
-			if (DEBUG) {
-				writeToScreen('<span style="color: blue;">RESPONSE: MSG_RESULTS</span>', 'debug');
-			}
-			break;
-		case MSG_LOGOUT:
-			message = extractNDTHeader(message);
-			if (DEBUG) {
-				writeToScreen('<span style="color: blue;">RESPONSE: MSG_LOGOUT</span>', 'debug');
-			}
-			//Testing complete. Close Connection and show results.
-			onControlClose();
-			break;
-		case MSG_WAITING:
-			message = extractNDTHeader(message);
-			if (DEBUG) {
-				writeToScreen('<span style="color: blue;">RESPONSE: MSG_WAITING</span>', 'debug');
-			}
-			break;
-		case MSG_EXTENDED_LOGIN:
-			message = extractNDTHeader(message);
-			if (DEBUG) {
-				writeToScreen('<span style="color: blue;">RESPONSE: MSG_EXTENDED_LOGIN</span>', 'debug');
-			}
-			break;
-		default:
-			//get results that arrive after their header
-			getResults(message);
-			var messageContent = extractNDTMessageBody(message, ndtMessageLength);
-			message = messageContent[0];
-
-			//get client upload speed from c2s test results
-			// client is awaiting message for the c2s test and the message is not empty
-			if (clientState.waitingForMessage && clientState.currentTest == TESTTYPE_C2S && messageContent[1] > 0) {
-				// client upload speed
-				if (DEBUG) {
-					writeToScreen('<span style="color: blue;">Client upload:' + messageContent[1] + '</span>', 'debug');
-				}
-				clientResults.serverDerivedUploadSpd = messageContent[1];
-
-				//After message is recieved set status back to false
-				clientState.waitingForMessage = false;
-			}
-
-			if (clientState.waitingForMessage && clientState.currentTest == HANDSHAKE && messageContent[1] >= 0) {
-				// client queue position
-				if (DEBUG) {
-					writeToScreen('<span style="color: blue;">Client Queue:' + messageContent[1] + '</span>', 'debug');
-				}
-
-				if (messageContent[1] == SRV_QUEUE_SERVER_FAULT) {
-					// Server Fault
-					if (DEBUG) {
-						writeToScreen('<span style="color: blue;">RESPONSE: Server Fault</span>', 'debug');
-					}
-					writeToScreen(displayMessages.serverFault, 'details');
-					//Close socket on fault
-					// ndtControlSocket.disconnect(ndtControlSocket.socketId);
-					break;
-
-				} else if (messageContent[1] == SRV_QUEUE_SERVER_BUSY) {
-					// Server busy/fault
-					if (DEBUG) {
-						writeToScreen('<span style="color: blue;">RESPONSE: Server busy or server fault</span>', 'debug');
-					}
-					writeToScreen(displayMessages.serverBusy, 'details');
-					//Close socket on fault
-					// ndtControlSocket.disconnect(ndtControlSocket.socketId);
-					break;
-
-				} else if (messageContent[1] == SRV_QUEUE_HEARTBEAT) {
-					//Test_Status check
-					// Signalize client is waiting with empty MSG_WAITING packet
-					sendNDTControlMsg(MSG_WAITING, "");
-					if (DEBUG) {
-						writeToScreen('<span style="color: blue;">RESPONSE: Client responded waiting...</span>', 'debug');
-					}
-
-				} else if (messageContent[1] != SRV_QUEUE_TEST_STARTS_NOW) {
-
-					clientState.queued = true;
-					clientState.timeTillStart = messageContent[1];
-					writeToScreen('Client queued. Test should start in approximately ' + clientState.timeTillStart + ' min.', 'details');
-				} else {
-					// Client starting tests
-					clientState.queued = false;
-					clientState.timeTillStart = null;
-				}
-
-				//After message is recieved set status back to false
-				clientState.waitingForMessage = false;
-			}
-
-			break;
+function readNDTControlMsg(header, content) {
+        // If there is currently a test that needs to be run, pass the message off to the function in charge of running that test.
+        if (testsToRun.length) {
+                if (testsToRun[0](header, content)) {
+                        testsToRun.shift();
+                }
+                return;
+        }
+        // No test is currently being run.
+	switch (header.charCodeAt(0)) {
+	case COMM_FAILURE:
+		if (DEBUG) {
+			writeToScreen('<span style="color: blue;">RESPONSE: COMM_FAILURE</span>', 'debug');
 		}
-	}
-}
-
-/**
- * Description Read the header of the incoming messages and strip it from the message
- * @method extractNDTHeader
- * @param {} message
- * @return message the rest of the message without the header.
- */
-function extractNDTHeader(message) {
-	//Get the length of the message from the header
-
-	//must be at least 3 bytes available to process
-	if (message.length >= 3) {
-		//get messagelength from second and third bytes in the Header
-		ndtMessageLength = (message.charCodeAt(1) << 8) | message.charCodeAt(2);
-
-		//Remove the header from messageStream, it is exactly 3 chars/bytes
-		message = removeFirstNChars(message, MSG_HEADER_LENGTH);
-
-		//if Header is received before the body set the waitingformessage flag
-		if (message.length <= 0 && ndtMessageLength > 0) {
-			clientState.waitingForMessage = true;
+		break;
+	case SRV_QUEUE:
+		clientState.waitingForMessage = true;
+		if (DEBUG) {
+			writeToScreen('<span style="color: blue;">RESPONSE: SRV_QUEUE</span>', 'debug');
 		}
+		break;
+	case MSG_LOGIN:
+		if (DEBUG) {
+			writeToScreen('<span style="color: blue;">RESPONSE: MSG_LOGIN</span>', 'debug');
+		}
+		//get the server Version. look for a "v" in the message for the version
+		if ((content.indexOf("v")) != -1) {
+			clientResults.serverVersion = content;
+			// if client version is too old close connection
+			if (clientResults.serverVersion < LAST_VALID_SERVER_VERSION) {
+				clientState.versionCompatible = false;
+				// ndtControlSocket.disconnect(ndtControlSocket.socketId);
+				writeToScreen('<span style="color: red;">Server is too old for this client. Closing connection.</span>', 'details');
+				break;
+			}
+			if (clientResults.serverVersion == CLIENT_VER) {
+				clientState.versionCompatible = true;
+				writeToScreen('<span style="color: blue;">Client and server have the same version.</span>', 'details');
+			}
+
+			if (clientResults.serverVersion > LAST_VALID_SERVER_VERSION && clientResults.serverVersion < CLIENT_VER || clientResults.serverVersion > CLIENT_VER) {
+				clientState.versionCompatible = true;
+				writeToScreen('<span style="color: orange;">Client and server do not have the same version, but should be compatible.</span>', 'details');
+			}
+
+			// Server version
+			writeToScreen('<span style="color: blue;">Server Version:' + clientResults.serverVersion + '</span>', 'details');
+		} else {
+                        var tests = content.split(' ');
+                        for (var i = 0; i < tests.length; i++) {
+                                if (tests[i] === '') {
+                                        // ignore extra spaces between tests
+                                } else if (parseInt(tests[i]) == TESTTYPE_S2C) {
+                                        if (DEBUG) {
+			                        writeToScreen('<span style="color: blue;">Server will run run S2C test</span>', 'debug');
+                                        }
+                                        testsToRun.push(processS2CMessage);
+                                } else if (parseInt(tests[i]) == TESTTYPE_C2S) {
+                                        if (DEBUG) {
+			                        writeToScreen('<span style="color: blue;">Server will run run C2S test</span>', 'debug');
+                                        }
+                                        testsToRun.push(processC2SMessage);
+                                } else if (parseInt(tests[i]) == TESTTYPE_META) {
+                                        if (DEBUG) {
+			                        writeToScreen('<span style="color: blue;">Server will run run META test</span>', 'debug');
+                                        }
+                                        testsToRun.push(processMetaMessage);
+                                } else {
+                                        if (DEBUG) {
+			                        writeToScreen('<span style="color: blue;">Unknown test type received: ' + parseInt(tests[i]) + '</span>', 'debug');
+                                        }
+                                }
+                        }
+                }
+		break;
+	case TEST_MSG:
+		getResults(content);
+		if (DEBUG) {
+			writeToScreen('<span style="color: blue;">RESPONSE: TEST_MSG</span>', 'debug');
+		}
+		// client queue position
+		if (DEBUG) {
+			writeToScreen('<span style="color: blue;">Client Queue:' + content + '</span>', 'debug');
+		}
+
+		if (content == SRV_QUEUE_SERVER_FAULT) {
+			// Server Fault
+			if (DEBUG) {
+				writeToScreen('<span style="color: blue;">RESPONSE: Server Fault</span>', 'debug');
+			}
+			writeToScreen(displayMessages.serverFault, 'details');
+			//Close socket on fault
+			// ndtControlSocket.disconnect(ndtControlSocket.socketId);
+			break;
+
+		} else if (content == SRV_QUEUE_SERVER_BUSY) {
+			// Server busy/fault
+			if (DEBUG) {
+				writeToScreen('<span style="color: blue;">RESPONSE: Server busy or server fault</span>', 'debug');
+			}
+			writeToScreen(displayMessages.serverBusy, 'details');
+			//Close socket on fault
+			// ndtControlSocket.disconnect(ndtControlSocket.socketId);
+			break;
+
+		} else if (content == SRV_QUEUE_HEARTBEAT) {
+			//Test_Status check
+			// Signalize client is waiting with empty MSG_WAITING packet
+			sendNDTControlMsg(MSG_WAITING, "");
+			if (DEBUG) {
+				writeToScreen('<span style="color: blue;">RESPONSE: Client responded waiting...</span>', 'debug');
+			}
+
+		} else if (content != SRV_QUEUE_TEST_STARTS_NOW) {
+
+			clientState.queued = true;
+			clientState.timeTillStart = content;
+			writeToScreen('Client queued. Test should start in approximately ' + clientState.timeTillStart + ' min.', 'details');
+		} else {
+			// Client starting tests
+			clientState.queued = false;
+			clientState.timeTillStart = null;
+		}
+
+		//After message is recieved set status back to false
+		clientState.waitingForMessage = false;
+		break;
+	case MSG_ERROR:
+		if (DEBUG) {
+			writeToScreen('<span style="color: blue;">RESPONSE: MSG_ERROR</span>', 'debug');
+		}
+		break;
+	case MSG_RESULTS:
+		getResults(content);
+		if (DEBUG) {
+			writeToScreen('<span style="color: blue;">RESPONSE: MSG_RESULTS</span>', 'debug');
+		}
+		break;
+	case MSG_LOGOUT:
+		if (DEBUG) {
+			writeToScreen('<span style="color: blue;">RESPONSE: MSG_LOGOUT</span>', 'debug');
+		}
+		//Testing complete. Close Connection and show results.
+		onControlClose();
+		break;
+	case MSG_WAITING:
+		if (DEBUG) {
+			writeToScreen('<span style="color: blue;">RESPONSE: MSG_WAITING</span>', 'debug');
+		}
+		break;
+	case MSG_EXTENDED_LOGIN:
+		if (DEBUG) {
+			writeToScreen('<span style="color: blue;">RESPONSE: MSG_EXTENDED_LOGIN</span>', 'debug');
+		}
+		break;
+	default:
+                if (DEBUG) {
+                        writeToScreen('<span style="color: red;">UNKNOWN MESSAGE CODE: ' + header.charCodeAt(0) + '</span>', 'debug');
+                }
+		break;
 	}
-	return message;
-
-}
-
-/**
- * Description returns the remaining message to be parsed as well as the content of the last message block
- * @method extractNDTMessageBody
- * @param {} message
- * @param {} messageLength
- * @return ArrayExpression
- */
-function extractNDTMessageBody(message, messageLength) {
-
-	var content = message.substring(0, messageLength);
-
-	if (DEBUG) {
-		writeToScreen('<span style="color: blue;">Message Content:' + content + '</span>', 'debug');
-	}
-
-	var remainingMessage = removeFirstNChars(message, messageLength);
-	ndtMessageLength = 0;
-
-	return [remainingMessage, content];
 }
 
 /**
