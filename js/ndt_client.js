@@ -141,8 +141,8 @@ function metaProgress() {
 function setGaugeValue(gaugeid, speedinKB) {
 	//Converts speed in kb/s to other sizes
 	var s = ['kB/s', 'MB/s', 'GB/s', 'TB/s', 'PB/s', 'EB/s'];
-	var e = Math.floor(Math.log(speedinKB) / Math.log(1024));
-	var value = (speedinKB / Math.pow(1024, e)).toFixed(2);
+	var e = Math.floor(Math.log(speedinKB) / Math.log(1000));
+	var value = (speedinKB / Math.pow(1000, e)).toFixed(2);
 
 	var opts = {
 		lines : 100, // The number of lines to draw
