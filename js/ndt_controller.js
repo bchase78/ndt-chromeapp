@@ -132,7 +132,7 @@ function onControlClose() {
  */
 function makeMessageResponder() {
 	// The variables to be closed over
-	var ndtMessageQueue = "", kicked = false;
+	var ndtMessageQueue = "", kicked = false, NDT_HEADER_SIZE = 3;
 	// The callback, closed over the queue and state variables.
 	return function (data) {
 		var msgLength, content, header;
@@ -146,14 +146,14 @@ function makeMessageResponder() {
 		}
 		// Process every message contained in the ndtMessageQueue
 		while (true) {
-			if (ndtMessageQueue.length < 3) { return; }
+			if (ndtMessageQueue.length < NDT_HEADER_SIZE) { return; }
 			msgLength = ((ndtMessageQueue.charCodeAt(1) << 8) | ndtMessageQueue.charCodeAt(2));
-			if (ndtMessageQueue.length < msgLength + 3) {
-                                return;
-                        }
-                        header = ndtMessageQueue.substr(0, 3)
-			content = ndtMessageQueue.substr(3, msgLength);
-			ndtMessageQueue = ndtMessageQueue.slice(msgLength + 3);
+			if (ndtMessageQueue.length < msgLength + NDT_HEADER_SIZE) {
+				return;
+			}
+			header = ndtMessageQueue.substr(0, NDT_HEADER_SIZE)
+			content = ndtMessageQueue.substr(NDT_HEADER_SIZE, msgLength);
+			ndtMessageQueue = ndtMessageQueue.slice(msgLength + NDT_HEADER_SIZE);
 			readNDTControlMsg(header, content);
 		}
 	};
@@ -178,14 +178,14 @@ function onError(evt) {
  * @return
  */
 function readNDTControlMsg(header, content) {
-        // If there is currently a test that needs to be run, pass the message off to the function in charge of running that test.
-        if (testsToRun.length) {
-                if (testsToRun[0](header, content)) {
-                        testsToRun.shift();
-                }
-                return;
-        }
-        // No test is currently being run.
+	// If there is currently a test that needs to be run, pass the message off to the function in charge of running that test.
+	if (testsToRun.length) {
+		if (testsToRun[0](header, content)) {
+			testsToRun.shift();
+		}
+		return;
+	}
+	// No test is currently being run.
 	switch (header.charCodeAt(0)) {
 	case COMM_FAILURE:
 		if (DEBUG) {
@@ -225,32 +225,30 @@ function readNDTControlMsg(header, content) {
 			// Server version
 			writeToScreen('<span style="color: blue;">Server Version:' + clientResults.serverVersion + '</span>', 'details');
 		} else {
-                        var tests = content.split(' ');
-                        for (var i = 0; i < tests.length; i++) {
-                                if (tests[i] === '') {
-                                        // ignore extra spaces between tests
-                                } else if (parseInt(tests[i]) == TESTTYPE_S2C) {
-                                        if (DEBUG) {
-			                        writeToScreen('<span style="color: blue;">Server will run run S2C test</span>', 'debug');
-                                        }
-                                        testsToRun.push(processS2CMessage);
-                                } else if (parseInt(tests[i]) == TESTTYPE_C2S) {
-                                        if (DEBUG) {
-			                        writeToScreen('<span style="color: blue;">Server will run run C2S test</span>', 'debug');
-                                        }
-                                        testsToRun.push(processC2SMessage);
-                                } else if (parseInt(tests[i]) == TESTTYPE_META) {
-                                        if (DEBUG) {
-			                        writeToScreen('<span style="color: blue;">Server will run run META test</span>', 'debug');
-                                        }
-                                        testsToRun.push(processMetaMessage);
-                                } else {
-                                        if (DEBUG) {
-			                        writeToScreen('<span style="color: blue;">Unknown test type received: ' + parseInt(tests[i]) + '</span>', 'debug');
-                                        }
-                                }
-                        }
-                }
+			var tests = content.split(' ').filter(function(el) {return el.length != 0});
+			for (var i = 0; i < tests.length; i++) {
+				if (parseInt(tests[i]) == TESTTYPE_S2C) {
+					if (DEBUG) {
+						writeToScreen('<span style="color: blue;">Server will run run S2C test</span>', 'debug');
+					}
+					testsToRun.push(processS2CMessage);
+				} else if (parseInt(tests[i]) == TESTTYPE_C2S) {
+					if (DEBUG) {
+						writeToScreen('<span style="color: blue;">Server will run run C2S test</span>', 'debug');
+					}
+					testsToRun.push(processC2SMessage);
+				} else if (parseInt(tests[i]) == TESTTYPE_META) {
+					if (DEBUG) {
+						writeToScreen('<span style="color: blue;">Server will run run META test</span>', 'debug');
+					}
+					testsToRun.push(processMetaMessage);
+				} else {
+					if (DEBUG) {
+						writeToScreen('<span style="color: blue;">Unknown test type received: ' + parseInt(tests[i]) + '</span>', 'debug');
+					}
+				}
+			}
+		}
 		break;
 	case TEST_MSG:
 		getResults(content);
@@ -333,9 +331,9 @@ function readNDTControlMsg(header, content) {
 		}
 		break;
 	default:
-                if (DEBUG) {
-                        writeToScreen('<span style="color: red;">UNKNOWN MESSAGE CODE: ' + header.charCodeAt(0) + '</span>', 'debug');
-                }
+		if (DEBUG) {
+			writeToScreen('<span style="color: red;">UNKNOWN MESSAGE CODE: ' + header.charCodeAt(0) + '</span>', 'debug');
+		}
 		break;
 	}
 }
