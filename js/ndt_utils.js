@@ -31,9 +31,10 @@ function createTestBuffer(size) {
         if (c == '127') {
             c = '33';
         }
-        chars[i] = c++;
+        chars[i] = String.fromCharCode(c);
+        c++;
     }
-    return String.fromCharCode.apply(null, chars);
+    return chars.join('')
 }
 
 /**

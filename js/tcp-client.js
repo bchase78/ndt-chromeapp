@@ -197,10 +197,6 @@ TcpClient.prototype._onReceiveError = function(info) {
  */
 TcpClient.prototype._onSendComplete = function(sendInfo) {
 	// log('onSendComplete');
-	//Only count the packages sent during the c2s test
-	if ((clientState.currentTest == TESTTYPE_C2S) && (clientResults.c2sEndTime == null)) {
-		clientResults.c2stestDatasent += PREDEFINED_BUFFER_SIZE;
-	}
 	// Call sent callback.
 	if (this.callbacks.sent) {
 		this.callbacks.sent(sendInfo);
